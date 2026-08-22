@@ -35,3 +35,10 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/launch.json
+
+# Demo recordings: takes are large and are published to YouTube, not to git.
+docs/video/*
+!docs/video/.gitkeep
+
+# Disposable state directory for a clean demo render.
+.belay-demo/

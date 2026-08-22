@@ -53,6 +53,81 @@ Keep the token figure only when the recording includes a measured before/after c
 - Keep the Cloud Run console and private service URL ready, but do not show account tokens, environment values, local identities, or `.tools/gcloud-config`.
 - Run `npm run demo:verify` once off-camera to confirm the machine is ready.
 
+## Rendering the video (no recording)
+
+The submission video is produced entirely programmatically. Nothing is screen-recorded and
+nothing is narrated live:
+
+```bash
+npm run render:video
+```
+
+That writes `docs/video/belay-demo.mp4` plus a matching `.srt`. The renderer:
+
+1. **Synthesizes narration** per beat from the `**Narration:**` lines below, through the
+   local Voicebox app (`--tts edge` switches to `edge-tts` on a machine without it).
+2. **Captures real evidence** — it runs the hero verifier, the no-leak sweep and the
+   egress boundary test, drives a live acquisition race over MCP, and requests the
+   protected command and approves it in the running Cockpit through Playwright. Every
+   transcript on screen is stdout from those runs; the captures land in
+   `docs/video/build/logs/`.
+3. **Renders frames** at 1920×1080 — terminal panels from the captured output, real
+   Cockpit screenshots, and title/diagram cards.
+4. **Composites** with ffmpeg against the narration track.
+
+Beat length is whatever its narration takes to speak, so picture and voice stay locked
+without trimming. `npm run render:check` runs preflight only. `--reuse` keeps existing
+audio and re-renders the picture, which is the fast loop when adjusting visuals.
+
+Requirements: ffmpeg on PATH, the daemon running, Chrome installed (Playwright drives it
+directly, so no browser download), and Voicebox running unless `--tts edge` is used.
+
+### Render against a clean state directory
+
+`seed-demo` is re-runnable, but each run adds its own checklist items, so a state
+directory that has been seeded many times accumulates milestones and the opening shot
+shows duplicates. For the submission render, point the daemon at a disposable state
+directory first:
+
+```bash
+node bin/belay.js start --state-dir .belay-demo
+```
+
+`.belay-demo/` is gitignored. Delete it to start over; the renderer seeds it from empty.
+
+## Running the take with the director
+
+The director is the manual fallback, kept for rehearsing a beat or recording a live take by
+hand. The rendered video above is the delivery path.
+
+`scripts/demo-director.mjs` runs the timed beats below as a single narrated take. It reads
+the narration, visuals and timings straight out of this file, so editing a beat here
+changes what the director shows and when it expects that beat to end.
+
+```bash
+npm run demo:check
+```
+
+Preflight: Node version, daemon build, daemon reachability, whether the cockpit is seeded,
+manifest freshness, leases left by an earlier take, ffmpeg, and anything on disk or in the
+environment that should stay out of frame. It also prints the ffmpeg capture command.
+
+Then two windows:
+
+- **off camera** — `npm run demo:prompter` shows the cue card for the current beat, the
+  take clock against the target timeline, and whether the take is ahead or behind.
+- **on camera** — `node scripts/demo-director.mjs` runs the take. Each beat starts its real
+  command automatically and then waits for ENTER, so narration is never cut short.
+
+The director never advances on its own. The approval beat additionally waits for a human
+to decide in the cockpit and reports the state the daemon recorded, including
+`indeterminate`. Add `--fail-closed` to run the vault-locked negative beat instead of the
+staging reload, `--from <n>` to restart at one beat, and `--rehearse` to walk the beats
+without running any command.
+
+Takes are repeatable: the director frees the acquisition-race paths before the race beat,
+so a second take shows the same single-winner result as the first.
+
 ## 0:00–0:25 — Problem and category
 
 **Visual:** Belay cockpit overview.
