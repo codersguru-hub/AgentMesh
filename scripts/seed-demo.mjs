@@ -12,14 +12,108 @@ import { resolve } from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 const endpoint = process.env.BELAY_MCP_URL ?? "http://127.0.0.1:3420/mcp";
+const daemonOrigin = new URL(endpoint).origin;
 const projectRoot = resolve(process.env.BELAY_PROJECT_ROOT ?? process.cwd());
 
 const AGENTS = ["Antigravity", "Claude Desktop", "Codex", "OpenCode"];
+
+/**
+ * Task ids and idempotency keys are per-run.
+ *
+ * `acquire_task` treats a replayed idempotency key whose task has since completed as
+ * TASK_NOT_ACTIVE rather than starting a new task, so reusing fixed keys made every seed
+ * after the first produce a cockpit with no active work. Fresh ids each run, plus the
+ * reset below to free the paths the previous run leased, keep this script re-runnable.
+ */
+const RUN_ID = Date.now().toString(36);
+
+/**
+ * Task ids read as the work an agent would actually be doing, because the cockpit shows
+ * them in the work queue. The run suffix is what keeps them unique; the reset below is
+ * what identifies them as this script's, so no scaffolding prefix is needed.
+ */
+const SEED_TASK_NAMES = [
+  "codex-auth-hardening",
+  "opencode-executor-streaming",
+  "claude-approval-expiry",
+  "claude-digest-review"
+];
+const taskId = (name) => `${name}-${RUN_ID}`;
+const key = (name) => `seed-${name}-${RUN_ID}`;
+
+/** Ids from earlier revisions of this script, still released on reset. */
+const LEGACY_TASK_IDS = [
+  "task-codex-auth",
+  "task-opencode-exec",
+  "task-claude-auth",
+  "task-claude-review"
+];
+const LEGACY_PREFIXES = ["seed-"];
+
+const TASKS = {
+  codexAuth: taskId("codex-auth-hardening"),
+  opencodeExec: taskId("opencode-executor-streaming"),
+  claudeAuth: taskId("claude-approval-expiry"),
+  claudeReview: taskId("claude-digest-review")
+};
+
+/**
+ * Checklist items are per-run for the same reason tasks are. A checklist item can only be
+ * acquired while it is pending or blocked and unlinked, so once the reset completes an
+ * item, that id can never carry work again - a stable id would make every later seed fail
+ * with CHECKLIST_CONFLICT. Completed items from earlier runs stay as finished milestones.
+ */
+const ITEMS = {
+  coordination: taskId("integrate-coordination-hub"),
+  vaultRotation: taskId("rotate-staging-credentials"),
+  egressAudit: taskId("audit-cloud-egress")
+};
 
 async function connect(name) {
   const client = new Client({ name: `belay-seed-${name}`, version: "0.1.0" });
   await client.connect(new StreamableHTTPClientTransport(new URL(endpoint)));
   return client;
+}
+
+/**
+ * Completes the tasks an earlier seed left holding leases. Without this the new run loses
+ * every acquisition to its own predecessor and the cockpit shows no live work.
+ */
+async function resetPreviousSeed(client) {
+  let snapshot;
+  try {
+    const response = await fetch(`${daemonOrigin}/api/dashboard`, { signal: AbortSignal.timeout(8000) });
+    snapshot = await response.json();
+  } catch {
+    return;
+  }
+  const stale = (snapshot.tasks ?? []).filter((task) => {
+    const id = task.id ?? task.taskId ?? "";
+    if (LEGACY_TASK_IDS.includes(id)) return true;
+    if (LEGACY_PREFIXES.some((prefix) => id.startsWith(prefix))) return true;
+    // "<name>-<runId>" from any earlier run of this script.
+    return SEED_TASK_NAMES.some((name) => id.startsWith(`${name}-`));
+  });
+  for (const task of stale) {
+    try {
+      await client.callTool({
+        name: "log_completion",
+        arguments: {
+          projectRoot,
+          taskId: task.id ?? task.taskId,
+          agentName: task.agentName,
+          summary: "Released by seed-demo so the next seed starts from free paths.",
+          modifiedFiles: [],
+          verificationEvidence: []
+        }
+      });
+    } catch {
+      // A task that cannot be completed is not worth aborting the seed over.
+    }
+  }
+  if (stale.length > 0) {
+    process.stdout.write(`00. Reset: released ${stale.length} task(s) from an earlier seed\n`);
+  }
 }
 
 let stepNumber = 0;
@@ -52,10 +146,12 @@ try {
   const codex = clients.Codex;
   const opencode = clients.OpenCode;
 
+  await resetPreviousSeed(antigravity);
+
   // ---- Shared plan: a completed milestone, live work, and a genuine blocker ----------
   await step(antigravity, "Plan: checklist item (auth coordination)", "add_checklist_item", {
     projectRoot,
-    itemId: "item-auth-coordination",
+    itemId: ITEMS.coordination,
     proposedBy: "Antigravity",
     title: "Integrate multi-agent coordination hub",
     description: "Verify multi-agent MCP connection and single-winner atomic locking.",
@@ -64,7 +160,7 @@ try {
   });
   await step(antigravity, "Plan: checklist item (vault rotation)", "add_checklist_item", {
     projectRoot,
-    itemId: "item-vault-rotation",
+    itemId: ITEMS.vaultRotation,
     proposedBy: "Antigravity",
     title: "Rotate staging credentials through the vault",
     description: "Move the staging reload command onto age-wrapped secret injection.",
@@ -73,7 +169,7 @@ try {
   });
   await step(antigravity, "Plan: checklist item (egress audit)", "add_checklist_item", {
     projectRoot,
-    itemId: "item-egress-audit",
+    itemId: ITEMS.egressAudit,
     proposedBy: "Antigravity",
     title: "Audit cloud egress payload shape",
     description: "Confirm only allowlisted structural metadata leaves the machine.",
@@ -84,48 +180,48 @@ try {
   // ---- Live work: two agents holding real leases on disjoint file sets ---------------
   await step(codex, "Work: Codex acquires auth surface", "acquire_task", {
     projectRoot,
-    taskId: "task-codex-auth",
+    taskId: TASKS.codexAuth,
     agentName: "Codex",
     title: "Harden the auth service surface",
     filePaths: ["packages/daemon/src/approval/approval-service.ts"],
     leaseSeconds: 3600,
-    idempotencyKey: "seed-codex-auth-0001",
-    checklistItemId: "item-auth-coordination"
+    idempotencyKey: key("codex-auth"),
+    checklistItemId: ITEMS.coordination
   });
   await step(codex, "Work: Codex reports progress", "report_task_progress", {
     projectRoot,
-    taskId: "task-codex-auth",
+    taskId: TASKS.codexAuth,
     agentName: "Codex",
     summary: "Digest binding verified; wiring replay rejection next.",
     progressPercent: 65,
     evidence: ["approval.integration.test.ts: 6 passed"],
-    idempotencyKey: "seed-codex-progress-0001"
+    idempotencyKey: key("codex-progress")
   });
 
   await step(opencode, "Work: OpenCode acquires executor", "acquire_task", {
     projectRoot,
-    taskId: "task-opencode-exec",
+    taskId: TASKS.opencodeExec,
     agentName: "OpenCode",
     title: "Bound executor output streaming",
     filePaths: ["packages/daemon/src/executor/command-executor.ts"],
     leaseSeconds: 3600,
-    idempotencyKey: "seed-opencode-exec-0001",
-    checklistItemId: "item-egress-audit"
+    idempotencyKey: key("opencode-exec"),
+    checklistItemId: ITEMS.egressAudit
   });
   await step(opencode, "Work: OpenCode reports progress", "report_task_progress", {
     projectRoot,
-    taskId: "task-opencode-exec",
+    taskId: TASKS.opencodeExec,
     agentName: "OpenCode",
     summary: "Redaction holds across chunk boundaries; adding hex variant coverage.",
     progressPercent: 40,
     evidence: ["executor.security.test.ts: 9 passed"],
-    idempotencyKey: "seed-opencode-progress-0001"
+    idempotencyKey: key("opencode-progress")
   });
 
   // ---- Contention: Claude collides with Codex, then asks Gemini to adjudicate --------
   const collision = await step(claude, "Contention: Claude races Codex for auth file", "acquire_task", {
     projectRoot,
-    taskId: "task-claude-auth",
+    taskId: TASKS.claudeAuth,
     agentName: "Claude Desktop",
     title: "Review approval expiry semantics",
     filePaths: [
@@ -133,7 +229,7 @@ try {
       "packages/daemon/src/approval/action-digest.ts"
     ],
     leaseSeconds: 3600,
-    idempotencyKey: "seed-claude-auth-0001"
+    idempotencyKey: key("claude-auth")
   });
   if (collision === undefined) {
     process.stdout.write("    ↳ expected: exactly one winner, Claude was correctly refused\n");
@@ -156,21 +252,21 @@ try {
   // that task on the contended file — which is how a real dependency stall looks.
   await step(claude, "Blocker: Claude takes the free path", "acquire_task", {
     projectRoot,
-    taskId: "task-claude-review",
+    taskId: TASKS.claudeReview,
     agentName: "Claude Desktop",
     title: "Review approval expiry semantics",
     filePaths: ["packages/daemon/src/approval/action-digest.ts"],
     leaseSeconds: 3600,
-    idempotencyKey: "seed-claude-review-0001",
-    checklistItemId: "item-vault-rotation"
+    idempotencyKey: key("claude-review"),
+    checklistItemId: ITEMS.vaultRotation
   });
   await step(claude, "Blocker: Claude blocks on contended file", "block_task", {
     projectRoot,
-    taskId: "task-claude-review",
+    taskId: TASKS.claudeReview,
     agentName: "Claude Desktop",
     reason: "Waiting on Codex to release the approval service lease before review.",
     evidence: ["explain_lock_conflict: approval-service.ts held by Codex"],
-    idempotencyKey: "seed-claude-block-0001"
+    idempotencyKey: key("claude-block")
   });
 
   // ---- Governance gate: proposals that require a human decision ---------------------
