@@ -29,9 +29,19 @@ if ($GcloudConfig) {
   $env:CLOUDSDK_CONFIG = $resolvedGcloudConfig
 }
 
+# gcloud writes routine notices such as "Updated property [core/project]." to stderr.
+# Windows PowerShell turns native stderr into a terminating error while
+# $ErrorActionPreference is "Stop", which aborts the deployment on a command that
+# actually succeeded, so the exit code is the only failure signal used here.
 function Invoke-Gcloud {
   param([Parameter(Mandatory = $true)][string[]]$Command)
-  & $Gcloud @Command
+  $previousPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & $Gcloud @Command
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
   if ($LASTEXITCODE -ne 0) {
     throw "gcloud command failed: $($Command[0..1] -join ' ')"
   }
@@ -39,7 +49,13 @@ function Invoke-Gcloud {
 
 function Get-GcloudValue {
   param([Parameter(Mandatory = $true)][string[]]$Command)
-  $value = & $Gcloud @Command
+  $previousPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $value = & $Gcloud @Command
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
   if ($LASTEXITCODE -ne 0) {
     throw "gcloud command failed: $($Command[0..1] -join ' ')"
   }

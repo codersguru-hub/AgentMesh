@@ -52,10 +52,15 @@ const out = (line = "") => process.stdout.write(`${line}\n`);
 function redactServiceUrl(url) {
   try {
     const host = new URL(url).host;
-    const match = /^([a-z0-9-]+?)-[a-z0-9]+-[a-z]{2}\.a\.run\.app$/u.exec(host);
-    return match ? `https://${match[1]}-***.a.run.app` : "https://***.a.run.app";
+    // Newer hostnames are "<service>-<project number>.<region>.run.app"; the older ones
+    // are "<service>-<hash>-<region abbreviation>.a.run.app". Both carry a
+    // project-specific component, so only the service name survives.
+    const modern = /^([a-z0-9-]+?)-\d+\.([a-z0-9-]+)\.run\.app$/u.exec(host);
+    if (modern) return `https://${modern[1]}-***.${modern[2]}.run.app`;
+    const legacy = /^([a-z0-9-]+?)-[a-z0-9]+-[a-z]{2}\.a\.run\.app$/u.exec(host);
+    return legacy ? `https://${legacy[1]}-***.a.run.app` : "https://***.run.app";
   } catch {
-    return "https://***.a.run.app";
+    return "https://***.run.app";
   }
 }
 
@@ -188,26 +193,71 @@ async function main() {
   }
   out(`  credentials  ${adc.source}`);
 
-  const { createBelayApp } = await import("@belay/daemon");
+  const { createBelayApp, CloudIntelligenceService, CloudRunSummaryAdapter } = await import(
+    "@belay/daemon"
+  );
   const app = createBelayApp({ projectRoot, cloudServiceUrl: deployment.url });
+
+  // The response is captured as it arrives so the report can separate "Gemini answered"
+  // from "the daemon could use the answer". Those are different failures with different
+  // fixes, and dispatch() collapses both into CLOUD_UNAVAILABLE.
+  const inner = new CloudRunSummaryAdapter(deployment.url);
+  let observed;
+  const recordingAdapter = {
+    provider: inner.provider,
+    async summarize(payload, options) {
+      const started = Date.now();
+      const response = await inner.summarize(payload, options);
+      observed = { response, sentRequestId: options.requestId, elapsed: Date.now() - started };
+      return response;
+    }
+  };
+
   try {
-    const started = Date.now();
-    const summary = await app.cloudIntelligence.summarizeManifest();
-    const elapsed = Date.now() - started;
-    out(`  model        ${summary.model}`);
-    out(`  generatedAt  ${summary.generatedAt}`);
-    out(`  latency      ${elapsed} ms`);
-    const headline = summary.summary ?? summary.headline ?? "";
-    if (headline) {
-      for (const line of String(headline).replaceAll(/\s+/gu, " ").match(/.{1,88}(\s|$)/gu) ?? []) {
-        out(`  advisory     ${redact(line.trim())}`);
+    const service = new CloudIntelligenceService(
+      app.database,
+      app.manifests,
+      app.vault,
+      projectRoot,
+      recordingAdapter
+    );
+    let usable = true;
+    try {
+      await service.summarizeManifest();
+    } catch {
+      usable = false;
+    }
+
+    if (!observed) {
+      out("  FAILED       no response was received from the service");
+      out("  Local coordination, approvals and vault policy are unaffected.");
+      exitCode = 1;
+    } else {
+      const { response, sentRequestId, elapsed } = observed;
+      out(`  model        ${response.model}`);
+      out(`  latency      ${elapsed} ms`);
+      out(`  riskLevel    ${response.riskLevel ?? "n/a"}`);
+      const headline = String(response.summary ?? "").replaceAll(/\s+/gu, " ").trim();
+      for (const line of headline.match(/.{1,84}(\s|$)/gu) ?? []) {
+        if (line.trim()) out(`  advisory     ${redact(line.trim())}`);
+      }
+
+      if (usable) {
+        out(`  correlation  echoed, response accepted`);
+        out(`  status       ${service.status().state}`);
+      } else if (response.requestId !== sentRequestId) {
+        // Replay protection: a response that does not carry the request id it was asked
+        // for is discarded, so a deployed revision that mints its own id can never be
+        // used no matter how good the advisory is.
+        out(`  correlation  MISMATCH - the revision minted its own request id`);
+        out(`  daemon       discards this response (replay protection), reports local_only`);
+        out(`  fix          redeploy the cloud service so it echoes x-belay-request-id`);
+        exitCode = 1;
+      } else {
+        out(`  daemon       rejected the response despite a matching request id`);
+        exitCode = 1;
       }
     }
-    const risks = summary.risks ?? summary.findings ?? [];
-    for (const risk of risks.slice(0, 3)) {
-      out(`  risk         ${redact(typeof risk === "string" ? risk : (risk.title ?? JSON.stringify(risk)))}`);
-    }
-    out(`  status       ${app.cloudIntelligence.status().state}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     out(`  FAILED       ${redact(message).slice(0, 200)}`);

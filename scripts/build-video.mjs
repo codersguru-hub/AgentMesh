@@ -295,8 +295,10 @@ const BEATS = [
         // Show the deployment facts and the egress verdicts. The remediation block that
         // appears when this machine has no credentials is collapsed to a single honest
         // line rather than eight lines of setup instructions on screen.
+        // Includes the correlation/daemon/fix lines: if the deployed revision cannot be
+        // used, the video must not show the advisory while hiding that fact.
         const keep =
-          /^\s*(service|region|revision|url|ingress|credentials|model|generatedAt|latency|advisory|status|REFUSED|LEAKED|NOT AUTHENTICATED|\d+\/\d+ forbidden|\[\d\/3\])/u;
+          /^\s*(service|region|revision|url|ingress|credentials|model|generatedAt|latency|riskLevel|advisory|correlation|daemon|fix|status|REFUSED|LEAKED|NOT AUTHENTICATED|\d+\/\d+ forbidden|\[\d\/3\])/u;
         const lines = smoke.output
           .split(/\r?\n/u)
           .map((line) => line.trimEnd())
