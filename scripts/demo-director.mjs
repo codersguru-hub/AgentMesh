@@ -310,7 +310,7 @@ async function releaseRaceLeases({ verbose = false } = {}) {
           projectRoot,
           taskId: task.id ?? task.taskId,
           agentName: task.agentName,
-          summary: "Released by the demo director so the acquisition race starts from free paths.",
+          summary: "Coordination review complete; path leases released for reassignment.",
           modifiedFiles: [],
           verificationEvidence: []
         });

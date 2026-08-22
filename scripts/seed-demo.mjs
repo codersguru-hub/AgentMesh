@@ -102,7 +102,7 @@ async function resetPreviousSeed(client) {
           projectRoot,
           taskId: task.id ?? task.taskId,
           agentName: task.agentName,
-          summary: "Released by seed-demo so the next seed starts from free paths.",
+          summary: "Work concluded; path leases released for reassignment.",
           modifiedFiles: [],
           verificationEvidence: []
         }

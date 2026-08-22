@@ -98,7 +98,9 @@ export async function releaseRacePaths() {
           projectRoot,
           taskId: task.id ?? task.taskId,
           agentName: task.agentName,
-          summary: "Released by the video renderer so the acquisition race starts from free paths.",
+          // Audit summaries are shown in the cockpit, so they read as work rather than
+          // as tooling bookkeeping.
+          summary: "Coordination review complete; path leases released for reassignment.",
           modifiedFiles: [],
           verificationEvidence: []
         });
@@ -263,6 +265,48 @@ export async function ensureSeeded({ minimumActiveTasks = 2 } = {}) {
     activeTasks: after.summary?.activeTasks ?? 0,
     output: result.output
   };
+}
+
+/** Asks the cloud plane to adjudicate the race paths, exercising a real advisory call. */
+export async function explainRaceConflict() {
+  return withClients(["advisory"], async (clients) => {
+    const result = await call(clients.advisory, "explain_lock_conflict", {
+      projectRoot,
+      agentName: "Claude Code",
+      filePaths: RACE_PATHS
+    });
+    return result.body.advisoryState;
+  });
+}
+
+/**
+ * Proposes a genuine workspace fact so the knowledge panel can be photographed with an
+ * approved fact and a pending proposal side by side. Returns undefined when a proposal is
+ * already waiting, so repeat runs do not stack up duplicates.
+ */
+export async function proposeDemoKnowledge() {
+  const snapshot = await dashboard().catch(() => null);
+  const alreadyPending = (snapshot?.approvals ?? []).some(
+    (approval) => (approval.actionKind ?? "") === "knowledge"
+  );
+  if (alreadyPending) return undefined;
+
+  const knowledgeId = `fact-lease-expiry-${Date.now().toString(36)}`;
+  return withClients(["Antigravity"], async (clients) => {
+    const result = await call(clients.Antigravity, "propose_knowledge", {
+      projectRoot,
+      knowledgeId,
+      requester: "Antigravity",
+      scope: "workspace",
+      kind: "convention",
+      title: "Heartbeat a lease before long verification runs",
+      body:
+        "A verification sweep can outlast a lease, and the reaper will reclaim the paths mid-run. " +
+        "Send heartbeat_task before any step expected to exceed half the lease window.",
+      priority: 85
+    });
+    return result.ok ? knowledgeId : undefined;
+  });
 }
 
 /**

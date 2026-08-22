@@ -143,25 +143,27 @@ https://github.com/codersguru-hub/Belay (Commit: `9fe90e5`)
 
 https://www.youtube.com/watch?v=AYwDyCFjJwQ
 
-### Four-minute outline
+### Outline (2:30, 1920×1080)
 
-1. **0:00–0:25 — Problem:** show independent coding agents losing alignment, duplicating context, colliding on files, and requesting dangerous actions.
-2. **0:25–1:05 — Shared truth:** one agent reads the pinned knowledge and checklist; another proposes a corrected workspace fact; the cockpit holds it until human approval; the first agent then sees the approved fact.
-3. **1:05–1:40 — Concurrent work:** Codex and Claude Code race for an overlapping file set; SQLite produces one winner and one actionable conflict with no partial locks.
-4. **1:40–2:25 — Secret-safe action:** run the hero verifier to show an encrypted vault value reaches the child process while raw, Base64, Base64url, hex, and URL-encoded forms remain absent from returned and persisted artifacts.
-5. **2:25–3:05 — Human authority:** show the amber protected-command card, exact digest, approve-once behavior, and replay rejection.
-6. **3:05–3:35 — Gemini and Cloud Run:** show the private ready revision, labeled Gemini 3.6 Flash result, and a forbidden raw-source/secret-shaped request making zero network calls.
-7. **3:35–4:00 — Proof:** show the architecture diagram and verifier summary; close on “shared state, safe execution, human authority.”
+1. **0:00–0:18 — Problem and category:** independent coding agents rescan the same repository, collide on files, and ask for credentials through prompt-visible workflows; the Cockpit opens on a live fleet.
+2. **0:19–0:31 — Deterministic context:** the hero verifier prints the bounded manifest — byte size, estimated tokens, warm index time, and a stable SHA-256 version.
+3. **0:32–0:47 — Concurrent work:** Codex and Claude Code request an overlapping file set in one acquisition window; SQLite produces exactly one winner and one actionable `LOCK_CONFLICT` with a correlation ID and no partial locks.
+4. **0:48–1:13 — Secret-safe action:** the no-leak sweep shows the vault value reaching the child process while raw, Base64, Base64url, hex, and URL-encoded forms stay absent from returned and persisted artifacts.
+5. **1:13–1:34 — Human authority:** the amber protected-command card with its exact digest, approved once in the live Cockpit, ending in the state the daemon actually recorded.
+6. **1:34–2:05 — Gemini and Cloud Run:** `npm run smoke:cloud` shows the private ready revision, a labelled Gemini 3.6 Flash advisory, and forbidden raw-source and secret-shaped payloads refused before any network call.
+7. **2:06–2:28 — Proof:** the architecture diagram and the closing claim — shared state, safe execution, human authority.
 
-The recording should be live and readable at 1080p, show visible Google Cloud proof, and reveal no account identifiers, tokens, browser cookies, identities, vault values, or local Cloud SDK configuration.
+The video is rendered programmatically by `npm run render:video`, not screen-recorded: narration is synthesized per beat, and every terminal panel is stdout captured from those same commands while every Cockpit frame is a screenshot of the running UI. Beat length follows the narration, so the timings above are the rendered result rather than a target. Output is 1080p, shows visible Google Cloud proof, and reveals no account identifiers, tokens, browser cookies, identities, vault values, or local Cloud SDK configuration. Captured transcripts for every claim are kept in `docs/video/build/logs/`.
 
 ## Screenshot Shot List
 
 1. `docs/screenshots/belay-cockpit-approval.png` — pending protected-command approval with requester, target, digest, expiry, and policy reason. (`demo-staging-reload` registers no environment variables, so no masked names appear on this specific card; commands that do would show them redacted.)
 2. `docs/screenshots/belay-cockpit-fail-closed.png` — a real `demo-vault-reload` request, approved while the vault is locked/unconfigured, ending `indeterminate` rather than silently succeeding; reproducible with `npm run demo:request-vault-approval`.
-3. **TODO:** capture the approved knowledge panel beside a pending knowledge proposal, showing project/workspace scope and provenance without repository-sensitive content.
-4. **TODO:** capture exactly-one-winner file contention with owner, path lease, and correlation ID visible.
-5. **TODO:** capture a redaction-reviewed Cloud Run ready revision and Gemini smoke result without account identifiers or credentials.
+3. `docs/screenshots/belay-cockpit-knowledge.png` — the governance gate holding a real workspace-scoped proposal with its requester, digest, expiry, and policy reason, beside the shared-knowledge panel of already-approved facts. No repository-sensitive content appears.
+4. `docs/screenshots/belay-cockpit-contention.png` — the work queue after a live acquisition race: owning agent, task id, locked paths, and remaining lease per task, with the audit stream beneath carrying the correlation ID for each event.
+5. `docs/screenshots/belay-cloud-smoke.png` — `npm run smoke:cloud` showing the ready Cloud Run revision, a labelled Gemini 3.6 Flash advisory, and three forbidden payloads refused before any network call. Project ids, service accounts, tokens, and the project-specific part of the Cloud Run hostname are redacted.
+
+All three are reproducible with `node scripts/capture-screenshots.mjs`, which puts the daemon into each state and photographs the running Cockpit rather than composing a mockup.
 
 ## Submission Readiness Notes
 
