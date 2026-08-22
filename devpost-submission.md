@@ -137,13 +137,11 @@ Then connect MCP clients to `http://127.0.0.1:3420/mcp` (or use 1-click config s
 
 ## Public Repository Link
 
-https://github.com/codersguru-hub/Belay
-
-**TODO:** Push the final tested revision, verify the public tree contains no sensitive state, and record the final tag/commit SHA here.
+https://github.com/codersguru-hub/Belay (Commit: `9fe90e5`)
 
 ## Demo Video
 
-**Required — TODO:** Add the final public YouTube or Vimeo URL.
+https://www.youtube.com/watch?v=AYwDyCFjJwQ
 
 ### Four-minute outline
 
