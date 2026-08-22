@@ -1515,7 +1515,9 @@
   background: #161b22;
 }
 .connection-state { padding: 9px 11px; color: #c9d1d9; }
-.cockpit-cloud-status { display: grid; gap: 3px; padding: 10px 12px; color: #c9d1d9; }
+/* Fills its 220px track. Without a width the box collapses to its padding while the text
+   inside keeps its own width, so the connected-state label overflows past the viewport. */
+.cockpit-cloud-status { display: grid; gap: 3px; width: 100%; padding: 10px 12px; color: #c9d1d9; }
 .cockpit-cloud-status b { color: #a8ceff; font-size: 11px; }
 .cockpit-cloud-status small { color: #8b949e; font: 10px Consolas, monospace; }
 .cockpit-cloud-status.online { border-color: rgb(91 156 255 / 40%); background: rgb(91 156 255 / 7%); }

@@ -17,7 +17,11 @@ import {
 import { EgressGuard, type AllowedEgress } from "./egress-guard.js";
 import type { CloudSummaryAdapter } from "./cloud-run-adapter.js";
 
-const DEFAULT_TIMEOUT_MILLISECONDS = 8_000;
+// A manifest summary from Gemini 3.6 Flash on Cloud Run measures 7-9 seconds in practice,
+// so an 8 second budget timed out the service's own healthy responses and left the cockpit
+// reporting a degraded cloud plane. The advisory is never on a blocking path - callers
+// fall back to local behaviour - so the budget can afford the real latency.
+const DEFAULT_TIMEOUT_MILLISECONDS = 20_000;
 
 function safeAlias(value: string, fallback: string): string {
   const normalized = value.replace(/[^A-Za-z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "");
