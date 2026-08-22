@@ -19,3 +19,5 @@ export { VaultService } from "./vault/vault-service.js";
 export { CommandExecutor } from "./executor/command-executor.js";
 export { ApprovalService } from "./approval/approval-service.js";
 export { CloudIntelligenceService } from "./cloud/cloud-intelligence-service.js";
+export { CloudRunSummaryAdapter } from "./cloud/cloud-run-adapter.js";
+export { EgressGuard, EgressRejectedError } from "./cloud/egress-guard.js";
